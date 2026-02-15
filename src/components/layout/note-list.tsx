@@ -1,14 +1,16 @@
 'use client'
 
-import { useRouter, usePathname } from 'next/navigation'
+import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useAppStore } from '@/stores/app-store'
 import { cn } from '@/lib/utils'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Button } from '@/components/ui/button'
-import { Plus, FileText } from 'lucide-react'
+import { Plus, FileText, Loader2 } from 'lucide-react'
 import { formatDistanceToNow } from '@/lib/date-utils'
+import { useState } from 'react'
+import { toast } from 'sonner'
 import type { Note } from '@/types/database'
 
 interface NoteListProps {
@@ -18,12 +20,21 @@ interface NoteListProps {
 
 export function NoteList({ notebookId, filter = 'all' }: NoteListProps) {
   const router = useRouter()
-  const pathname = usePathname()
   const supabase = createClient()
   const queryClient = useQueryClient()
   const { selectedNoteId, setSelectedNoteId } = useAppStore()
+  const [creating, setCreating] = useState(false)
 
   const queryKey = ['notes', { notebookId, filter }]
+
+  const { data: user } = useQuery({
+    queryKey: ['user'],
+    queryFn: async () => {
+      const { data: { user } } = await supabase.auth.getUser()
+      return user
+    },
+    staleTime: Infinity,
+  })
 
   const { data: notes, isLoading } = useQuery({
     queryKey,
@@ -50,8 +61,8 @@ export function NoteList({ notebookId, filter = 'all' }: NoteListProps) {
   })
 
   async function handleNewNote() {
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return
+    if (!user || creating) return
+    setCreating(true)
 
     const insertData: { user_id: string; title: string; notebook_id?: string } = {
       user_id: user.id,
@@ -59,17 +70,24 @@ export function NoteList({ notebookId, filter = 'all' }: NoteListProps) {
     }
     if (notebookId) insertData.notebook_id = notebookId
 
-    const { data: note } = await supabase
+    const { data: note, error } = await supabase
       .from('notes')
       .insert(insertData)
       .select()
       .single()
+
+    if (error) {
+      toast.error('Failed to create note')
+      setCreating(false)
+      return
+    }
 
     if (note) {
       queryClient.invalidateQueries({ queryKey: ['notes'] })
       setSelectedNoteId(note.id)
       router.push(`/notes/${note.id}`)
     }
+    setCreating(false)
   }
 
   function getPreview(note: Pick<Note, 'plain_text'>) {
@@ -78,14 +96,14 @@ export function NoteList({ notebookId, filter = 'all' }: NoteListProps) {
   }
 
   return (
-    <div className="flex h-full w-[300px] flex-col border-r">
+    <div className="flex h-full w-[300px] flex-col border-r shrink-0">
       <div className="flex items-center justify-between px-4 py-3 border-b">
         <h2 className="font-semibold text-sm">
           {filter === 'favorites' ? 'Favorites' : filter === 'trash' ? 'Trash' : notebookId ? 'Notebook' : 'All Notes'}
         </h2>
         {filter !== 'trash' && (
-          <Button variant="ghost" size="icon" className="h-7 w-7" onClick={handleNewNote}>
-            <Plus className="h-4 w-4" />
+          <Button variant="ghost" size="icon" className="h-7 w-7" onClick={handleNewNote} disabled={creating}>
+            {creating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
           </Button>
         )}
       </div>
@@ -98,8 +116,13 @@ export function NoteList({ notebookId, filter = 'all' }: NoteListProps) {
             {notes.map((note) => (
               <button
                 key={note.id}
+                draggable
+                onDragStart={(e) => {
+                  e.dataTransfer.setData('text/note-id', note.id)
+                  e.dataTransfer.effectAllowed = 'move'
+                }}
                 className={cn(
-                  'w-full text-left px-4 py-3 hover:bg-accent/50 transition-colors',
+                  'w-full text-left px-4 py-3 hover:bg-accent/50 transition-colors cursor-grab active:cursor-grabbing',
                   selectedNoteId === note.id && 'bg-accent'
                 )}
                 onClick={() => {

@@ -45,6 +45,8 @@ export function NoteEditor({ note }: NoteEditorProps) {
   const [saving, setSaving] = useState(false)
   const [wordCount, setWordCount] = useState(note.word_count)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const noteIdRef = useRef(note.id)
+  noteIdRef.current = note.id
 
   const { data: attachments, refetch: refetchAttachments } = useQuery({
     queryKey: ['attachments', note.id],
@@ -64,15 +66,15 @@ export function NoteEditor({ note }: NoteEditorProps) {
       const { error } = await supabase
         .from('notes')
         .update(data)
-        .eq('id', note.id)
+        .eq('id', noteIdRef.current)
 
       if (error) {
         toast.error('Failed to save')
       }
       setSaving(false)
-      queryClient.invalidateQueries({ queryKey: ['notes'] })
+      // Don't invalidate the whole note list on every keystroke — only on explicit actions
     },
-    [note.id, supabase, queryClient]
+    [supabase]
   )
 
   const debounceSave = useCallback(
@@ -85,15 +87,15 @@ export function NoteEditor({ note }: NoteEditorProps) {
 
   const handleImageUpload = useCallback(
     async (file: File) => {
-      const result = await uploadFile(file, note.id)
+      const result = await uploadFile(file, noteIdRef.current)
       if (result) {
-        await createAttachmentRecord(note.id, file, result.path)
+        await createAttachmentRecord(noteIdRef.current, file, result.path)
         refetchAttachments()
         return result.url
       }
       return null
     },
-    [note.id, refetchAttachments]
+    [refetchAttachments]
   )
 
   const editor = useEditor({
@@ -103,7 +105,7 @@ export function NoteEditor({ note }: NoteEditorProps) {
         dropcursor: false,
       }),
       Placeholder.configure({
-        placeholder: 'Start writing... (drag images here)',
+        placeholder: 'Start writing...',
       }),
       TaskList,
       TaskItem.configure({ nested: true }),
@@ -150,14 +152,13 @@ export function NoteEditor({ note }: NoteEditorProps) {
             return true
           }
 
-          // Non-image files: upload as attachments
           const otherFiles = files.filter((f) => !f.type.startsWith('image/'))
           if (otherFiles.length > 0) {
             event.preventDefault()
             otherFiles.forEach(async (file) => {
-              const result = await uploadFile(file, note.id)
+              const result = await uploadFile(file, noteIdRef.current)
               if (result) {
-                await createAttachmentRecord(note.id, file, result.path)
+                await createAttachmentRecord(noteIdRef.current, file, result.path)
                 refetchAttachments()
                 toast.success(`Uploaded ${file.name}`)
               }
@@ -292,7 +293,6 @@ export function NoteEditor({ note }: NoteEditorProps) {
 
   return (
     <div className="flex flex-1 flex-col overflow-hidden">
-      {/* Header */}
       <div className="flex items-center justify-between px-4 py-2 border-b">
         <div className="flex items-center gap-2 text-xs text-muted-foreground">
           {saving && <span>Saving...</span>}
@@ -390,10 +390,8 @@ export function NoteEditor({ note }: NoteEditorProps) {
         multiple
       />
 
-      {/* Toolbar */}
       <EditorToolbar editor={editor} />
 
-      {/* Title + Editor */}
       <div className="flex-1 overflow-y-auto">
         <div className="px-8 pt-6">
           <input
@@ -406,7 +404,6 @@ export function NoteEditor({ note }: NoteEditorProps) {
         </div>
         <EditorContent editor={editor} />
 
-        {/* Attachments section */}
         {attachments && attachments.length > 0 && (
           <div className="px-8 pb-6 mt-4 border-t pt-4">
             <h3 className="text-sm font-medium text-muted-foreground mb-2">
