@@ -1,6 +1,6 @@
 'use client'
 
-import { useParams } from 'next/navigation'
+import { useParams, useSearchParams } from 'next/navigation'
 import { useQuery } from '@tanstack/react-query'
 import { createClient } from '@/lib/supabase/client'
 import { NoteEditor } from '@/components/notes/note-editor'
@@ -10,9 +10,14 @@ import { useEffect } from 'react'
 
 export default function NoteEditorPage() {
   const params = useParams()
+  const searchParams = useSearchParams()
   const noteId = params.noteId as string
   const supabase = createClient()
   const { setSelectedNoteId } = useAppStore()
+
+  // Determine which list context to show based on where user navigated from
+  const fromNotebook = searchParams.get('notebook') ?? undefined
+  const fromFilter = searchParams.get('filter') as 'favorites' | 'trash' | 'all' | undefined
 
   useEffect(() => {
     setSelectedNoteId(noteId)
@@ -34,7 +39,10 @@ export default function NoteEditorPage() {
   return (
     <>
       <div className="hidden md:block">
-        <NoteList filter={note?.is_trashed ? 'trash' : 'all'} notebookId={note?.notebook_id ?? undefined} />
+        <NoteList
+          filter={fromFilter ?? 'all'}
+          notebookId={fromNotebook}
+        />
       </div>
       {isLoading ? (
         <div className="flex flex-1 items-center justify-center">

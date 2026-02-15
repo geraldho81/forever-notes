@@ -9,7 +9,7 @@ import { ScrollArea } from '@/components/ui/scroll-area'
 import { Button } from '@/components/ui/button'
 import { Plus, FileText, Loader2 } from 'lucide-react'
 import { formatDistanceToNow } from '@/lib/date-utils'
-import { useState } from 'react'
+import { useCallback, useState } from 'react'
 import { toast } from 'sonner'
 import type { Note } from '@/types/database'
 
@@ -85,10 +85,18 @@ export function NoteList({ notebookId, filter = 'all' }: NoteListProps) {
     if (note) {
       queryClient.invalidateQueries({ queryKey: ['notes'] })
       setSelectedNoteId(note.id)
-      router.push(`/notes/${note.id}`)
+      router.push(getNoteUrl(note.id))
     }
     setCreating(false)
   }
+
+  const getNoteUrl = useCallback((noteId: string) => {
+    const params = new URLSearchParams()
+    if (notebookId) params.set('notebook', notebookId)
+    if (filter && filter !== 'all') params.set('filter', filter)
+    const qs = params.toString()
+    return `/notes/${noteId}${qs ? `?${qs}` : ''}`
+  }, [notebookId, filter])
 
   function getPreview(note: Pick<Note, 'plain_text'>) {
     const text = note.plain_text || ''
@@ -127,7 +135,7 @@ export function NoteList({ notebookId, filter = 'all' }: NoteListProps) {
                 )}
                 onClick={() => {
                   setSelectedNoteId(note.id)
-                  router.push(`/notes/${note.id}`)
+                  router.push(getNoteUrl(note.id))
                 }}
               >
                 <div className="flex items-start gap-2">

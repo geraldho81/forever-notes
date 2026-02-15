@@ -60,9 +60,12 @@ export function NoteEditor({ note }: NoteEditorProps) {
     },
   })
 
+  const pendingDataRef = useRef<{ title?: string; content?: Json; plain_text?: string; word_count?: number } | null>(null)
+
   const saveNote = useCallback(
     async (data: { title?: string; content?: Json; plain_text?: string; word_count?: number }) => {
       setSaving(true)
+      pendingDataRef.current = null
       const { error } = await supabase
         .from('notes')
         .update(data)
@@ -72,18 +75,40 @@ export function NoteEditor({ note }: NoteEditorProps) {
         toast.error('Failed to save')
       }
       setSaving(false)
-      // Don't invalidate the whole note list on every keystroke — only on explicit actions
     },
     [supabase]
   )
 
   const debounceSave = useCallback(
     (data: { title?: string; content?: Json; plain_text?: string; word_count?: number }) => {
+      pendingDataRef.current = { ...pendingDataRef.current, ...data }
       if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
-      saveTimerRef.current = setTimeout(() => saveNote(data), 1500)
+      saveTimerRef.current = setTimeout(() => saveNote(pendingDataRef.current!), 1500)
     },
     [saveNote]
   )
+
+  const flushSave = useCallback(() => {
+    if (saveTimerRef.current) {
+      clearTimeout(saveTimerRef.current)
+      saveTimerRef.current = null
+    }
+    if (pendingDataRef.current) {
+      saveNote(pendingDataRef.current)
+    }
+  }, [saveNote])
+
+  // Flush pending saves on unmount / note switch
+  useEffect(() => {
+    return () => {
+      if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
+      if (pendingDataRef.current) {
+        const data = pendingDataRef.current
+        const id = noteIdRef.current
+        supabase.from('notes').update(data).eq('id', id)
+      }
+    }
+  }, [supabase])
 
   const handleImageUpload = useCallback(
     async (file: File) => {
@@ -216,6 +241,11 @@ export function NoteEditor({ note }: NoteEditorProps) {
   function handleTitleChange(newTitle: string) {
     setTitle(newTitle)
     debounceSave({ title: newTitle })
+  }
+
+  function handleTitleBlur() {
+    flushSave()
+    queryClient.invalidateQueries({ queryKey: ['notes'] })
   }
 
   async function toggleFavorite() {
@@ -398,6 +428,7 @@ export function NoteEditor({ note }: NoteEditorProps) {
             type="text"
             value={title}
             onChange={(e) => handleTitleChange(e.target.value)}
+            onBlur={handleTitleBlur}
             placeholder="Untitled"
             className="w-full text-3xl font-bold bg-transparent border-none outline-none placeholder:text-muted-foreground/50"
           />
