@@ -10,6 +10,12 @@ import { Input } from '@/components/ui/input'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Separator } from '@/components/ui/separator'
 import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
+import {
   FileText,
   Plus,
   Search,
@@ -22,8 +28,8 @@ import {
   PanelLeftClose,
   Clock,
   Loader2,
-  Check,
-  X,
+  MoreHorizontal,
+  Pencil,
 } from 'lucide-react'
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { toast } from 'sonner'
@@ -137,6 +143,12 @@ export function Sidebar() {
     await supabase.from('notebooks').update({ name: trimmed }).eq('id', id)
     queryClient.invalidateQueries({ queryKey: ['notebooks'] })
     setEditingNotebookId(null)
+  }
+
+  async function deleteNotebook(id: string) {
+    await supabase.from('notebooks').delete().eq('id', id)
+    queryClient.invalidateQueries({ queryKey: ['notebooks'] })
+    toast.success('Notebook deleted')
   }
 
   const handleNoteDrop = useCallback(async (notebookId: string, e: React.DragEvent) => {
@@ -256,23 +268,48 @@ export function Sidebar() {
                   />
                 </div>
               ) : (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className={cn(
-                    'w-full justify-start gap-2 text-sm',
-                    pathname === `/notebooks/${notebook.id}` && 'bg-accent'
-                  )}
-                  onClick={() => router.push(`/notebooks/${notebook.id}`)}
-                  onDoubleClick={(e) => {
-                    e.preventDefault()
-                    setEditingNotebookId(notebook.id)
-                    setEditName(notebook.name)
-                  }}
-                >
-                  <BookOpen className="h-4 w-4" />
-                  <span className="truncate">{notebook.name}</span>
-                </Button>
+                <div className="group flex items-center">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className={cn(
+                      'flex-1 justify-start gap-2 text-sm',
+                      pathname === `/notebooks/${notebook.id}` && 'bg-accent'
+                    )}
+                    onClick={() => router.push(`/notebooks/${notebook.id}`)}
+                  >
+                    <BookOpen className="h-4 w-4" />
+                    <span className="truncate">{notebook.name}</span>
+                  </Button>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-6 w-6 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <MoreHorizontal className="h-3.5 w-3.5" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" side="bottom">
+                      <DropdownMenuItem onClick={() => {
+                        setEditingNotebookId(notebook.id)
+                        setEditName(notebook.name)
+                      }}>
+                        <Pencil className="h-4 w-4 mr-2" />
+                        Rename
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        className="text-destructive"
+                        onClick={() => deleteNotebook(notebook.id)}
+                      >
+                        <Trash2 className="h-4 w-4 mr-2" />
+                        Delete
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </div>
               )}
             </div>
           ))}
